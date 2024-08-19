@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package agent;
+
+option go_package = "github.com/rendizi/stay-connected-inst/internal/grpc";
+
+message isBusyRequest{
+
+}
+
+message isBusyResponse{
+  bool result = 1;
+}
+
+message SummarizeStoriesRequest {
+  repeated string usernames = 1;
+  float left = 2;
+  bool isDaily = 3;
+  string userPreferences = 4;
+}
+
+message SummarizeStoriesResponse{
+  string result = 1;
+  string linkToVideo = 2;
+  float used = 3;
+}
+
+service StoriesSummarizer{
+  rpc IsBusy(isBusyRequest) returns (isBusyResponse);
+  rpc SummarizeStories(SummarizeStoriesRequest) returns (stream SummarizeStoriesResponse);
+}
