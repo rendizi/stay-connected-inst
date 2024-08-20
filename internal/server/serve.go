@@ -298,7 +298,7 @@ func (s *Server) SummarizeStories(req *grpc.SummarizeStoriesRequest, stream grpc
 	logger.Info(fmt.Sprintf("Generated video JSON from medias:", data))
 	var Id string
 	if !skip {
-		id, err = shotstack.GenerateVideo(Data)
+		Id, err = shotstack.GenerateVideo(Data)
 		if err != nil {
 			logger.Error(fmt.Sprintf("Error generating video ID:", err))
 			skip = true

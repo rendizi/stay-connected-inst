@@ -5,7 +5,7 @@ package agent;
 option go_package = "github.com/rendizi/stay-connected-inst/internal/grpc";
 
 message queueLengthRequest{
-
+  
 }
 
 message queueLengthResponse{
