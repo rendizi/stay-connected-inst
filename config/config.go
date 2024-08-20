@@ -33,7 +33,7 @@ var QueueLength queueLength
 func init() {
 	// Load environment variables from .env file
 	if err := godotenv.Load(); err != nil {
-		panic("Error loading .env file")
+		// panic("Error loading .env file")
 	}
 
 	Config = AppConfig{
