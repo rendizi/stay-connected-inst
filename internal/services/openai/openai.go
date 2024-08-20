@@ -91,7 +91,7 @@ func SummarizeImagesToOne(userPrompt []StoriesType, busines bool, preferences st
 	apiEndpoint := "https://api.openai.com/v1/chat/completions"
 
 	client := resty.New()
-	content := "You are given array of storieses summarize. I am very busy so give the most interesting ones, make them shorter without losing an idea. Maximum symbols-100, don't use markup symbols. Response should be like 1 text, no need to divide into ordered/unordered list. If is is empty or there is information not interesting and not related with someone's life- return 'Nothing interesting'. Write simple. User's preferences: " + preferences
+	content := "You are given array of storieses summarize. I am very busy so give the most interesting ones, make them shorter without losing an idea. Maximum symbols-100, don't use markup symbols. Response should be like 1 text, no need to divide into ordered/unordered list. If is is empty or there is information not interesting and not related with someone's life- return 'Nothing interesting'. Also write how can I start dialog with him, suggest some action . Write simple. User's preferences: " + preferences
 	if busines {
 		content = "You are given array of storieses summarize of some busines account. I am very buse so give the most interesting ones, make them shorter without losing an idea. Maximum symbols-100, dont use markup symbols. Response should be like 1 text, no need to divide into ordered/unordered list. If it is epty or there is no interestings inferomation, news or info that can be helpful for concurents - return 'Nothing interesting'. Wrtie simple. User's preferences: " + preferences
 	}

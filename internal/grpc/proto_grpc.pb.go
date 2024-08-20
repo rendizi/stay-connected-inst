@@ -19,7 +19,7 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	StoriesSummarizer_IsBusy_FullMethodName           = "/agent.StoriesSummarizer/IsBusy"
+	StoriesSummarizer_QueueLength_FullMethodName      = "/agent.StoriesSummarizer/QueueLength"
 	StoriesSummarizer_SummarizeStories_FullMethodName = "/agent.StoriesSummarizer/SummarizeStories"
 )
 
@@ -27,7 +27,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type StoriesSummarizerClient interface {
-	IsBusy(ctx context.Context, in *IsBusyRequest, opts ...grpc.CallOption) (*IsBusyResponse, error)
+	QueueLength(ctx context.Context, in *QueueLengthRequest, opts ...grpc.CallOption) (*QueueLengthResponse, error)
 	SummarizeStories(ctx context.Context, in *SummarizeStoriesRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[SummarizeStoriesResponse], error)
 }
 
@@ -39,10 +39,10 @@ func NewStoriesSummarizerClient(cc grpc.ClientConnInterface) StoriesSummarizerCl
 	return &storiesSummarizerClient{cc}
 }
 
-func (c *storiesSummarizerClient) IsBusy(ctx context.Context, in *IsBusyRequest, opts ...grpc.CallOption) (*IsBusyResponse, error) {
+func (c *storiesSummarizerClient) QueueLength(ctx context.Context, in *QueueLengthRequest, opts ...grpc.CallOption) (*QueueLengthResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(IsBusyResponse)
-	err := c.cc.Invoke(ctx, StoriesSummarizer_IsBusy_FullMethodName, in, out, cOpts...)
+	out := new(QueueLengthResponse)
+	err := c.cc.Invoke(ctx, StoriesSummarizer_QueueLength_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ type StoriesSummarizer_SummarizeStoriesClient = grpc.ServerStreamingClient[Summa
 // All implementations must embed UnimplementedStoriesSummarizerServer
 // for forward compatibility.
 type StoriesSummarizerServer interface {
-	IsBusy(context.Context, *IsBusyRequest) (*IsBusyResponse, error)
+	QueueLength(context.Context, *QueueLengthRequest) (*QueueLengthResponse, error)
 	SummarizeStories(*SummarizeStoriesRequest, grpc.ServerStreamingServer[SummarizeStoriesResponse]) error
 	mustEmbedUnimplementedStoriesSummarizerServer()
 }
@@ -84,8 +84,8 @@ type StoriesSummarizerServer interface {
 // pointer dereference when methods are called.
 type UnimplementedStoriesSummarizerServer struct{}
 
-func (UnimplementedStoriesSummarizerServer) IsBusy(context.Context, *IsBusyRequest) (*IsBusyResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method IsBusy not implemented")
+func (UnimplementedStoriesSummarizerServer) QueueLength(context.Context, *QueueLengthRequest) (*QueueLengthResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method QueueLength not implemented")
 }
 func (UnimplementedStoriesSummarizerServer) SummarizeStories(*SummarizeStoriesRequest, grpc.ServerStreamingServer[SummarizeStoriesResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method SummarizeStories not implemented")
@@ -111,20 +111,20 @@ func RegisterStoriesSummarizerServer(s grpc.ServiceRegistrar, srv StoriesSummari
 	s.RegisterService(&StoriesSummarizer_ServiceDesc, srv)
 }
 
-func _StoriesSummarizer_IsBusy_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(IsBusyRequest)
+func _StoriesSummarizer_QueueLength_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(QueueLengthRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(StoriesSummarizerServer).IsBusy(ctx, in)
+		return srv.(StoriesSummarizerServer).QueueLength(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: StoriesSummarizer_IsBusy_FullMethodName,
+		FullMethod: StoriesSummarizer_QueueLength_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(StoriesSummarizerServer).IsBusy(ctx, req.(*IsBusyRequest))
+		return srv.(StoriesSummarizerServer).QueueLength(ctx, req.(*QueueLengthRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -148,8 +148,8 @@ var StoriesSummarizer_ServiceDesc = grpc.ServiceDesc{
 	HandlerType: (*StoriesSummarizerServer)(nil),
 	Methods: []grpc.MethodDesc{
 		{
-			MethodName: "IsBusy",
-			Handler:    _StoriesSummarizer_IsBusy_Handler,
+			MethodName: "QueueLength",
+			Handler:    _StoriesSummarizer_QueueLength_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

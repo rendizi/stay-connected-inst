@@ -4,12 +4,12 @@ package agent;
 
 option go_package = "github.com/rendizi/stay-connected-inst/internal/grpc";
 
-message isBusyRequest{
+message queueLengthRequest{
 
 }
 
-message isBusyResponse{
-  bool result = 1;
+message queueLengthResponse{
+  float response = 1;
 }
 
 message SummarizeStoriesRequest {
@@ -26,6 +26,6 @@ message SummarizeStoriesResponse{
 }
 
 service StoriesSummarizer{
-  rpc IsBusy(isBusyRequest) returns (isBusyResponse);
+  rpc QueueLength(queueLengthRequest) returns(queueLengthResponse);
   rpc SummarizeStories(SummarizeStoriesRequest) returns (stream SummarizeStoriesResponse);
 }

@@ -22,7 +22,13 @@ type AppConfig struct {
 	mu                   sync.Mutex
 }
 
+type queueLength struct {
+	length int
+	mu     sync.Mutex
+}
+
 var Config AppConfig
+var QueueLength queueLength
 
 func init() {
 	// Load environment variables from .env file
@@ -43,6 +49,16 @@ func init() {
 		GeminiKey:            os.Getenv("GEMINI_KEY"),
 		Port:                 5000, // Default port, update as needed
 	}
+	QueueLength = queueLength{
+		length: 0,
+		mu:     sync.Mutex{},
+	}
+}
+
+func GetQueueLength() int {
+	QueueLength.mu.Lock()
+	defer QueueLength.mu.Unlock()
+	return QueueLength.length
 }
 
 func SetBusy() {
@@ -63,14 +79,15 @@ func IsBusy() bool {
 	return Config.IsBusy
 }
 
-// Add to Queue
-func Enqueue(item string) {
+func Enqueue(item string, length int) {
 	Config.mu.Lock()
 	defer Config.mu.Unlock()
+	QueueLength.mu.Lock()
+	defer QueueLength.mu.Unlock()
+	QueueLength.length += length
 	Config.Queue = append(Config.Queue, item)
 }
 
-// Remove from Queue
 func Dequeue() string {
 	Config.mu.Lock()
 	defer Config.mu.Unlock()
@@ -84,9 +101,12 @@ func Dequeue() string {
 	return item
 }
 
-func RemoveFromQueue(item string) {
+func RemoveFromQueue(item string, length int) {
 	Config.mu.Lock()
 	defer Config.mu.Unlock()
+	QueueLength.mu.Lock()
+	defer QueueLength.mu.Unlock()
+	QueueLength.length -= length
 
 	for i, v := range Config.Queue {
 		if v == item {
@@ -95,14 +115,6 @@ func RemoveFromQueue(item string) {
 	}
 }
 
-// Check Queue Length
-func QueueLength() int {
-	Config.mu.Lock()
-	defer Config.mu.Unlock()
-	return len(Config.Queue)
-}
-
-// Get Next in Queue without removing
 func NextInQueue() string {
 	Config.mu.Lock()
 	defer Config.mu.Unlock()

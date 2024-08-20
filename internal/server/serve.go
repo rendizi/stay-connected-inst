@@ -22,8 +22,9 @@ type Server struct {
 	grpc.UnimplementedStoriesSummarizerServer
 }
 
-func (s *Server) IsBusy(ctx context.Context, req *grpc.IsBusyRequest) (*grpc.IsBusyResponse, error) {
-	return &grpc.IsBusyResponse{Result: config.Config.IsBusy}, nil
+func (s *Server) QueueLength(ctx context.Context, req *grpc.QueueLengthRequest) (*grpc.QueueLengthResponse, error) {
+	length := config.GetQueueLength()
+	return &grpc.QueueLengthResponse{Response: float32(length)}, nil
 }
 
 func (s *Server) SummarizeStories(req *grpc.SummarizeStoriesRequest, stream grpc.StoriesSummarizer_SummarizeStoriesServer) error {
@@ -48,8 +49,8 @@ func (s *Server) SummarizeStories(req *grpc.SummarizeStoriesRequest, stream grpc
 		return nil
 	}
 	id := fmt.Sprintf("%s", uuid.New())
-	config.Enqueue(id)
-	defer config.RemoveFromQueue(id)
+	config.Enqueue(id, len(usernames))
+	defer config.RemoveFromQueue(id, len(usernames))
 	if err := stream.Send(Format("Queued")); err != nil {
 		return err
 	}
