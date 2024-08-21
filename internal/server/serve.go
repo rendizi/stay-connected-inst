@@ -87,7 +87,7 @@ func (s *Server) SummarizeStories(req *grpc.SummarizeStoriesRequest, stream grpc
 
 	for _, username := range usernames {
 
-		data, err = redis.GetSummarizes(context.Background(), username)
+		data, _, err = redis.GetSummarizes(context.Background(), username)
 		if err != nil {
 			logger.Error("Error retrieving summarizes from Redis", zap.String("username", username), zap.Error(err))
 		}
@@ -136,17 +136,77 @@ func (s *Server) SummarizeStories(req *grpc.SummarizeStoriesRequest, stream grpc
 			var addIt bool
 			var resp string
 			var val string
-			for _, media := range story.Images.Versions {
-				val, err = redis.GetSummarizes(context.Background(), media.URL)
+			var clip_length int
+			var was_video bool
+			for _, media := range story.Videos {
+				was_video = true
+				if usedIsMoreThanLeft {
+					break
+				}
+				val, addIt, err = redis.GetSummarizes(context.Background(), media.URL)
 				if err != nil {
 					if !profile.User.IsBusiness {
-						prompt = fmt.Sprintf("I have an image from an %s's(use it when want to write about him instead of writing 'user') Instagram story. Your task is to determine if it contains any interesting or relevant information about the person's life or news. If it does, summarize this information in 1 short sentence. If the image content is not related to the person's personal life, not interesting or important activities/news, return following response: 'Nothing interesting'. Give logically connected summarize based on previous storieses(if it is empty- don't say me it is empty, give result only based on photo or return empty response):%s.Last 7 days stories: %s. Don't repeat what is already summarized and in old storieses. Additional stories info: events: %s, hashtags: %s, polls: %s, locations: %s, questions: %s, sliders: %s, mentions: %s. Maximum tokens: 75, write it as simple as possible, like people would say, use simple words. Response should be in following json format: {\"description\":string,\"addIt\":bool}. If you think that this stories should be added to short recap video- addIt true, otherwise false",
+						prompt = fmt.Sprintf("I have a video from an %s's(use it when want to write about him instead of writing 'user') Instagram story. Your task is to determine if it contains any interesting or relevant information about the person's life or news. If it does, summarize this information in 1 short sentence. If the video content is not related to the person's personal life, not interesting or important activities/news, return following response: 'Nothing interesting'. Give logically connected summarize based on previous storieses(if it is empty- don't say me it is empty, give result only based on video or return empty response):%s.Last 7 days stories: %s. Don't repeat what is already summarized and in old storieses. Additional stories info: events: %s, hashtags: %s, polls: %s, locations: %s, questions: %s, sliders: %s, mentions: %s. Maximum tokens: 75, write it as simple as possible, like people would say, use simple words. Response should be in following json format: {\"description\":string,\"addIt\":bool,\"clip_length\":int}. If you think that this stories should be added to short recap video- addIt true, otherwise false. If addIt is true say what's length in seconds it should be in clip as \"clip_length\"",
 							story.User.Username, temp, data, story.StoryEvents, story.StoryHashtags, story.StoryPolls, story.StoryLocations, story.StorySliders, story.StoryQuestions, story.Mentions)
 					} else {
-						prompt = fmt.Sprintf("I have an image from an %s's(use it when want to write about him instead of writing 'user') Instagram story. Your task is to determine if it contains any interesting or relevant information about the busines's news or sales. If it does, summarize this information in 1 short sentence. If the image content is not interesting or important activities/news, return following response: 'Nothing interesting'. Give logically connected summarize based on previous storieses(if it is empty- don't say me it is empty, give result only based on photo or return empty response):%s.Last 7 days stories: %s. Don't repeat what is already summarized and in old storieses. Additional stories info: events: %s, hashtags: %s, polls: %s, locations: %s, questions: %s, sliders: %s, mentions: %s. Maximum tokens: 75, write it as simple as possible, like people would say, use simple words. Response should be in following json format: {\"description\":string,\"addIt\":bool}. If you think that this stories should be added to short recap video- addIt true, otherwise false.",
+						prompt = fmt.Sprintf("I have a video from an %s's(use it when want to write about him instead of writing 'user') Instagram story. Your task is to determine if it contains any interesting or relevant information about the busines's news or sales. If it does, summarize this information in 1 short sentence. If the video content is not interesting or important activities/news, return following response: 'Nothing interesting'. Give logically connected summarize based on previous storieses(if it is empty- don't say me it is empty, give result only based on video or return empty response):%s.Last 7 days stories: %s. Don't repeat what is already summarized and in old storieses. Additional stories info: events: %s, hashtags: %s, polls: %s, locations: %s, questions: %s, sliders: %s, mentions: %s. Maximum tokens: 75, write it as simple as possible, like people would say, use simple words. Response should be in following json format: {\"description\":string,\"addIt\":bool,\"clip_length\":int}. If you think that this stories should be added to short recap video- addIt true, otherwise false . If addIt is true say what's length in seconds it should be in clip as \"clip_length\"",
 							story.User.Username, temp, data, story.StoryEvents, story.StoryHashtags, story.StoryPolls, story.StoryLocations, story.StorySliders, story.StoryQuestions, story.Mentions)
 					}
-					resp, addIt, err = openai.SummarizeImage(media.URL, prompt)
+
+					resp, clip_length, addIt, err = gemini.SummarizeVideo(media.URL, prompt)
+					used += 1
+					if used >= left {
+						usedIsMoreThanLeft = true
+						break
+					}
+					if err != nil {
+						logger.Error("Error summarizing video", zap.String("URL", media.URL), zap.Error(err))
+						continue
+					}
+					if addIt {
+						var tempAsset shotstack.Asset
+						tempAsset.Type = "video"
+						tempAsset.Src = media.URL
+						tempAsset.Length = clip_length
+						medias = append(medias, tempAsset)
+					}
+					err = redis.StoreSummarizes(context.Background(), media.URL, map[string]interface{}{"value": resp, "addIt": addIt}, "", 24*time.Hour)
+					if err != nil {
+						logger.Error("Error storing summarized video in Redis", zap.String("URL", media.URL), zap.Error(err))
+						continue
+					}
+				} else {
+					resp = val
+				}
+				if resp != "Nothing interesting" || resp != "Nothing interesting." {
+					var tempStoriesType openai.StoriesType
+					tempStoriesType.Author = story.User.Username
+					tempStoriesType.Summarize = resp
+					if profile.User.Friendship.FollowedBy {
+						temp = append([]openai.StoriesType{tempStoriesType}, temp...)
+					} else {
+						temp = append(temp, tempStoriesType)
+					}
+				}
+				if err = stream.Send(Format(resp)); err != nil {
+					return err
+				}
+				break
+			}
+			if was_video {
+				continue
+			}
+			for _, media := range story.Images.Versions {
+				val, addIt, err = redis.GetSummarizes(context.Background(), media.URL)
+				if err != nil {
+					if !profile.User.IsBusiness {
+						prompt = fmt.Sprintf("I have an image from an %s's(use it when want to write about him instead of writing 'user') Instagram story. Your task is to determine if it contains any interesting or relevant information about the person's life or news. If it does, summarize this information in 1 short sentence. If the image content is not related to the person's personal life, not interesting or important activities/news, return following response: 'Nothing interesting'. Give logically connected summarize based on previous storieses(if it is empty- don't say me it is empty, give result only based on photo or return empty response):%s.Last 7 days stories: %s. Don't repeat what is already summarized and in old storieses. Additional stories info: events: %s, hashtags: %s, polls: %s, locations: %s, questions: %s, sliders: %s, mentions: %s. Maximum tokens: 75, write it as simple as possible, like people would say, use simple words. Response should be in following json format: {\"description\":string,\"addIt\":bool,\"clip_length\":int}. If you think that this stories should be added to short recap video- addIt true, otherwise false . If addIt is true say what's length in seconds it should be in clip as \"clip_length\"",
+							story.User.Username, temp, data, story.StoryEvents, story.StoryHashtags, story.StoryPolls, story.StoryLocations, story.StorySliders, story.StoryQuestions, story.Mentions)
+					} else {
+						prompt = fmt.Sprintf("I have an image from an %s's(use it when want to write about him instead of writing 'user') Instagram story. Your task is to determine if it contains any interesting or relevant information about the busines's news or sales. If it does, summarize this information in 1 short sentence. If the image content is not interesting or important activities/news, return following response: 'Nothing interesting'. Give logically connected summarize based on previous storieses(if it is empty- don't say me it is empty, give result only based on photo or return empty response):%s.Last 7 days stories: %s. Don't repeat what is already summarized and in old storieses. Additional stories info: events: %s, hashtags: %s, polls: %s, locations: %s, questions: %s, sliders: %s, mentions: %s. Maximum tokens: 75, write it as simple as possible, like people would say, use simple words. Response should be in following json format: {\"description\":string,\"addIt\":bool,\"clip_length\"}. If you think that this stories should be added to short recap video- addIt true, otherwise false. If addIt is true say what's length in seconds it should be in clip as \"clip_length\"",
+							story.User.Username, temp, data, story.StoryEvents, story.StoryHashtags, story.StoryPolls, story.StoryLocations, story.StorySliders, story.StoryQuestions, story.Mentions)
+					}
+					resp, clip_length, addIt, err = openai.SummarizeImage(media.URL, prompt)
 					used += 1
 					if used >= left {
 						usedIsMoreThanLeft = true
@@ -160,10 +220,11 @@ func (s *Server) SummarizeStories(req *grpc.SummarizeStoriesRequest, stream grpc
 						var tempAsset shotstack.Asset
 						tempAsset.Type = "image"
 						tempAsset.Src = media.URL
+						tempAsset.Length = clip_length
 						medias = append(medias, tempAsset)
 					}
 
-					err = redis.StoreSummarizes(context.Background(), media.URL, resp, 24*time.Hour)
+					err = redis.StoreSummarizes(context.Background(), media.URL, map[string]interface{}{"value": resp, "addIt": addIt}, "", 24*time.Hour)
 					if err != nil {
 						logger.Error("Error storing summarized image in Redis", zap.String("URL", media.URL), zap.Error(err))
 						continue
@@ -188,59 +249,7 @@ func (s *Server) SummarizeStories(req *grpc.SummarizeStoriesRequest, stream grpc
 
 				break
 			}
-			for _, media := range story.Videos {
-				if usedIsMoreThanLeft {
-					break
-				}
-				val, err = redis.GetSummarizes(context.Background(), media.URL)
-				if err != nil {
-					if !profile.User.IsBusiness {
-						prompt = fmt.Sprintf("I have a video from an %s's(use it when want to write about him instead of writing 'user') Instagram story. Your task is to determine if it contains any interesting or relevant information about the person's life or news. If it does, summarize this information in 1 short sentence. If the video content is not related to the person's personal life, not interesting or important activities/news, return following response: 'Nothing interesting'. Give logically connected summarize based on previous storieses(if it is empty- don't say me it is empty, give result only based on video or return empty response):%s.Last 7 days stories: %s. Don't repeat what is already summarized and in old storieses. Additional stories info: events: %s, hashtags: %s, polls: %s, locations: %s, questions: %s, sliders: %s, mentions: %s. Maximum tokens: 75, write it as simple as possible, like people would say, use simple words. Response should be in following json format: {\"description\":string,\"addIt\":bool}. If you think that this stories should be added to short recap video- addIt true, otherwise false. ",
-							story.User.Username, temp, data, story.StoryEvents, story.StoryHashtags, story.StoryPolls, story.StoryLocations, story.StorySliders, story.StoryQuestions, story.Mentions)
-					} else {
-						prompt = fmt.Sprintf("I have a video from an %s's(use it when want to write about him instead of writing 'user') Instagram story. Your task is to determine if it contains any interesting or relevant information about the busines's news or sales. If it does, summarize this information in 1 short sentence. If the video content is not interesting or important activities/news, return following response: 'Nothing interesting'. Give logically connected summarize based on previous storieses(if it is empty- don't say me it is empty, give result only based on video or return empty response):%s.Last 7 days stories: %s. Don't repeat what is already summarized and in old storieses. Additional stories info: events: %s, hashtags: %s, polls: %s, locations: %s, questions: %s, sliders: %s, mentions: %s. Maximum tokens: 75, write it as simple as possible, like people would say, use simple words. Response should be in following json format: {\"description\":string,\"addIt\":bool}. If you think that this stories should be added to short recap video- addIt true, otherwise false ",
-							story.User.Username, temp, data, story.StoryEvents, story.StoryHashtags, story.StoryPolls, story.StoryLocations, story.StorySliders, story.StoryQuestions, story.Mentions)
-					}
 
-					resp, addIt, err = gemini.SummarizeVideo(media.URL, prompt)
-					used += 1
-					if used >= left {
-						usedIsMoreThanLeft = true
-						break
-					}
-					if err != nil {
-						logger.Error("Error summarizing video", zap.String("URL", media.URL), zap.Error(err))
-						continue
-					}
-					if addIt {
-						var tempAsset shotstack.Asset
-						tempAsset.Type = "video"
-						tempAsset.Src = media.URL
-						medias = append(medias, tempAsset)
-					}
-					err = redis.StoreSummarizes(context.Background(), media.URL, resp, 24*time.Hour)
-					if err != nil {
-						logger.Error("Error storing summarized video in Redis", zap.String("URL", media.URL), zap.Error(err))
-						continue
-					}
-				} else {
-					resp = val
-				}
-				if resp != "Nothing interesting" || resp != "Nothing interesting." {
-					var tempStoriesType openai.StoriesType
-					tempStoriesType.Author = story.User.Username
-					tempStoriesType.Summarize = resp
-					if profile.User.Friendship.FollowedBy {
-						temp = append([]openai.StoriesType{tempStoriesType}, temp...)
-					} else {
-						temp = append(temp, tempStoriesType)
-					}
-				}
-				if err = stream.Send(Format(resp)); err != nil {
-					return err
-				}
-				break
-			}
 		}
 		summarize, err := openai.SummarizeImagesToOne(temp, profile.User.IsBusiness, preferences)
 		logger.Info(fmt.Sprintf("%s", temp))
@@ -270,7 +279,7 @@ func (s *Server) SummarizeStories(req *grpc.SummarizeStoriesRequest, stream grpc
 					logger.Info(fmt.Sprintf("Error marshalling this week's data for user:", username, err))
 					stringified = []byte(data)
 				}
-				err = redis.StoreSummarizes(context.Background(), username, string(stringified), 7*24*time.Hour)
+				err = redis.StoreSummarizes(context.Background(), username, nil, string(stringified), 7*24*time.Hour)
 				if err != nil {
 					logger.Info(fmt.Sprintf("Error storing this week's data in Redis for user:", username, err))
 				}
@@ -305,14 +314,15 @@ func (s *Server) SummarizeStories(req *grpc.SummarizeStoriesRequest, stream grpc
 		}
 	}
 	logger.Info(fmt.Sprintf("Generated video with ID:", Id))
+	var url string
 	if !skip {
-		url, err := shotstack.GetUrl(Id)
+		url, err = shotstack.GetUrl(Id)
 		if err != nil {
 			logger.Error(fmt.Sprintf("Error generating video URL:", err))
 			skip = true
 		}
-		return stream.Send(&grpc.SummarizeStoriesResponse{Result: string(jsoned), LinkToVideo: url, Used: used})
 	}
+	return stream.Send(&grpc.SummarizeStoriesResponse{Result: string(jsoned), LinkToVideo: url, Used: used})
 	return nil
 }
 

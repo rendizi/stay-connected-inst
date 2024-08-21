@@ -10,6 +10,7 @@ import (
 	"github.com/rendizi/stay-connected-inst/pkg/logger"
 	"google.golang.org/api/option"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -62,11 +63,11 @@ func downloadFile(url string) (io.Reader, string, error) {
 	return resp.Body, randomName, nil
 }
 
-func SummarizeVideo(fileURL string, promptText string) (string, bool, error) {
+func SummarizeVideo(fileURL string, promptText string) (string, int, bool, error) {
 	ctx := context.Background()
 	client, err := genai.NewClient(ctx, option.WithAPIKey(config.Config.GeminiKey))
 	if err != nil {
-		return "", false, err
+		return "", 0, false, err
 	}
 	defer client.Close()
 
@@ -75,7 +76,7 @@ func SummarizeVideo(fileURL string, promptText string) (string, bool, error) {
 	// Download the file from the URL
 	reader, fileName, err := downloadFile(fileURL)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to download file: %w", err)
+		return "", 0, false, fmt.Errorf("failed to download file: %w", err)
 	}
 	defer func() {
 		if closer, ok := reader.(io.Closer); ok {
@@ -93,7 +94,7 @@ func SummarizeVideo(fileURL string, promptText string) (string, bool, error) {
 		MIMEType: "video/mp4",
 	})
 	if err != nil {
-		return "", false, fmt.Errorf("failed to upload file: %w", err)
+		return "", 0, false, fmt.Errorf("failed to upload file: %w", err)
 	}
 
 	// Check the file processing state
@@ -101,12 +102,12 @@ func SummarizeVideo(fileURL string, promptText string) (string, bool, error) {
 		time.Sleep(5 * time.Second)
 		uploadedFile, err = client.GetFile(ctx, uploadedFile.Name)
 		if err != nil {
-			return "", false, fmt.Errorf("failed to get file status: %w", err)
+			return "", 0, false, fmt.Errorf("failed to get file status: %w", err)
 		}
 	}
 
 	if uploadedFile.State != genai.FileStateActive {
-		return "", false, fmt.Errorf("uploaded file has state %s, not active", uploadedFile.State)
+		return "", 0, false, fmt.Errorf("uploaded file has state %s, not active", uploadedFile.State)
 	}
 
 	// Create the prompt
@@ -119,7 +120,7 @@ func SummarizeVideo(fileURL string, promptText string) (string, bool, error) {
 
 	resp, err := model.GenerateContent(ctx, prompt...)
 	if err != nil {
-		return "", false, fmt.Errorf("failed to generate content: %w", err)
+		return "", 0, false, fmt.Errorf("failed to generate content: %w", err)
 	}
 
 	// Collect summary content
@@ -128,13 +129,16 @@ func SummarizeVideo(fileURL string, promptText string) (string, bool, error) {
 			var data map[string]interface{}
 			err = json.Unmarshal([]byte(fmt.Sprintf("%s\n", c.Content.Parts[0])), &data)
 			if err != nil {
-				return "", false, err
+				return "", 0, false, err
 			}
 			description := data["description"].(string)
 			addIt := data["addIt"].(bool)
-			return description, addIt, nil
+			length := data["clip_length"].(float64)
+			log.Println(data)
+
+			return description, int(length), addIt, nil
 		}
 	}
 
-	return "", false, nil
+	return "", 0, false, nil
 }

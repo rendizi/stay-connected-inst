@@ -32,8 +32,9 @@ type Timeline struct {
 }
 
 type Asset struct {
-	Type string `json:"type"`
-	Src  string `json:"src"`
+	Type   string `json:"type"`
+	Src    string `json:"src"`
+	Length int
 }
 
 type Transition struct {
@@ -59,10 +60,14 @@ func GenerateVideoJson(medias []Asset) (Data, error) {
 
 	for i, media := range medias {
 		var clip Clip
-		clip.Asset = media
+		clip.Asset = Asset{Type: media.Type, Src: media.Src}
 		clip.Start = start
 
-		clip.Length = rand.Intn(3) + 1
+		if media.Length == 0 {
+			continue
+		}
+
+		clip.Length = media.Length
 
 		clip.Effect = effects[rand.Intn(len(effects))]
 

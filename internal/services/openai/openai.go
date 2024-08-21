@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"github.com/go-resty/resty/v2"
 	"github.com/rendizi/stay-connected-inst/pkg/logger"
+	"log"
 	"os"
 )
 
-func SummarizeImage(url string, prompt string) (string, bool, error) {
+func SummarizeImage(url string, prompt string) (string, int, bool, error) {
 	apiEndpoint := "https://api.openai.com/v1/chat/completions"
 
 	apiKey := os.Getenv("OPENAI_KEY")
@@ -44,7 +45,7 @@ func SummarizeImage(url string, prompt string) (string, bool, error) {
 		Post(apiEndpoint)
 
 	if err != nil {
-		return "", false, fmt.Errorf("Error while sending the request: %v", err)
+		return "", 0, false, fmt.Errorf("Error while sending the request: %v", err)
 	}
 
 	body := response.Body()
@@ -52,12 +53,12 @@ func SummarizeImage(url string, prompt string) (string, bool, error) {
 	var data map[string]interface{}
 	err = json.Unmarshal(body, &data)
 	if err != nil {
-		return "", false, fmt.Errorf("Error while decoding JSON response: %v", err)
+		return "", 0, false, fmt.Errorf("Error while decoding JSON response: %v", err)
 	}
 
 	choices := data["choices"].([]interface{})
 	if len(choices) == 0 {
-		return "", false, fmt.Errorf("No choices found in the response")
+		return "", 0, false, fmt.Errorf("No choices found in the response")
 	}
 
 	message := choices[0].(map[string]interface{})["message"].(map[string]interface{})["content"].(string)
@@ -65,20 +66,26 @@ func SummarizeImage(url string, prompt string) (string, bool, error) {
 	var result map[string]interface{}
 	err = json.Unmarshal([]byte(message), &result)
 	if err != nil {
-		return "", false, fmt.Errorf("Error while decoding message content JSON: %v", err)
+		return "", 0, false, fmt.Errorf("Error while decoding message content JSON: %v", err)
 	}
 
 	description, ok := result["description"].(string)
 	if !ok {
-		return "", false, fmt.Errorf("No description found in the response")
+		return "", 0, false, fmt.Errorf("No description found in the response")
+	}
+
+	length, ok := result["clip_length"].(float64)
+	if !ok {
+		length = 0
 	}
 
 	addIt, ok := result["addIt"].(bool)
 	if !ok {
 		addIt = false
 	}
+	log.Println(result)
 
-	return description, addIt, nil
+	return description, int(length), addIt, nil
 }
 
 type StoriesType struct {
